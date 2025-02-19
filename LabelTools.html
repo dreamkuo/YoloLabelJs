@@ -1,0 +1,1944 @@
+<!DOCTYPE html>
+<!--
+Copyright (c) 2024 喵师傅
+QQ: 292373656
+未经允许请勿转载
+-->
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>YOLO标注工具</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100%;
+            touch-action: none;
+        }
+
+        body {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .image-container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 400px;
+            padding: 20px;
+            width: 100%;
+            box-sizing: border-box;
+            overflow: auto;
+        }
+
+        #imageCanvas {
+            position: relative;
+            cursor: none;
+            display: block;
+            margin: 0;
+            padding: 0;
+            image-rendering: pixelated;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            transform-origin: center center;
+        }
+
+        .canvas-container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .selection-box {
+            position: absolute;
+            border: 2px solid #007bff;
+            background-color: rgba(0, 123, 255, 0.1);
+            pointer-events: none;
+            box-sizing: border-box;
+            z-index: 1000;
+            cursor: move;
+            transform-origin: 0 0;
+        }
+
+        #tempBox {
+            position: absolute;
+            border: 2px dashed #ff0000;
+            background-color: rgba(255, 0, 0, 0.1);
+            pointer-events: none;
+            display: none;
+            z-index: 1001;
+            transform-origin: 0 0;
+        }
+
+        .box-label {
+            position: absolute;
+            top: -20px;
+            left: 0;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .upload-section {
+            margin: 20px;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            text-align: center;
+        }
+
+        .status {
+            margin: 10px;
+            padding: 10px;
+            background: #f0f0f0;
+        }
+
+        .upload-section button {
+            padding: 8px 15px;
+            margin: 0 5px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .upload-section button:hover {
+            background-color: #45a049;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .resize-handle {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background-color: white;
+            border: 1px solid #007bff;
+            z-index: 1002;
+            display: none;
+        }
+
+        .resize-handle.nw {
+            top: -4px;
+            left: -4px;
+            cursor: nw-resize;
+        }
+
+        .resize-handle.ne {
+            top: -4px;
+            right: -4px;
+            cursor: ne-resize;
+        }
+
+        .resize-handle.sw {
+            bottom: -4px;
+            left: -4px;
+            cursor: sw-resize;
+        }
+
+        .resize-handle.se {
+            bottom: -4px;
+            right: -4px;
+            cursor: se-resize;
+        }
+
+        .selection-box.selected {
+            border: 2px solid #ff0000 !important;
+        }
+
+        .selection-box.selectable {
+            pointer-events: auto;
+        }
+
+        .selection-box.selectable .resize-handle {
+            display: block;
+        }
+
+        /* 修改标签管理面板样式 */
+        .label-panel {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 200px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+            /* 添加合适的z-index */
+        }
+
+        .label-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+
+        .label-item {
+            display: flex;
+            align-items: center;
+            padding: 5px;
+            margin: 3px 0;
+            cursor: pointer;
+            border-radius: 3px;
+            position: relative;
+            user-select: none;
+            /* 防止文本被选中 */
+        }
+
+        .label-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+        }
+
+        .delete-label {
+            visibility: hidden;
+            padding: 2px 6px;
+            margin-left: 5px;
+            background: #ff4444;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .label-item:hover .delete-label {
+            visibility: visible;
+        }
+
+        .delete-label:hover {
+            background: #ff0000;
+        }
+
+        .label-item:hover {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .label-item.active {
+            background: rgba(0, 123, 255, 0.1);
+            border-left: 3px solid #007bff;
+        }
+
+        .label-item.active .label-content {
+            font-weight: bold;
+        }
+
+        .label-item.default {
+            border-left: 3px solid #4CAF50;
+        }
+
+        .add-label-form {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+        }
+
+        .add-label-form input {
+            width: 100%;
+            padding: 5px;
+            margin-bottom: 5px;
+        }
+
+        /* 添加下拉框样式 */
+        .default-label-select {
+            width: 100%;
+            padding: 5px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: white;
+        }
+
+        /* 修改下载对话框和遮罩层的z-index */
+        #downloadDialog {
+            /* ... 其他样式保持不变 ... */
+            z-index: 1001 !important;
+            /* 确保高于标签面板 */
+        }
+
+        #overlay {
+            /* ... 其他样式保持不变 ... */
+            z-index: 1000 !important;
+            /* 确保高于标签面板但低于对话框 */
+        }
+
+        .moving-box {
+            position: absolute;
+            border: 2px dashed #ff0000;
+            background-color: rgba(255, 0, 0, 0.1);
+            pointer-events: none;
+            z-index: 1001;
+            box-sizing: border-box;
+            transform-origin: 0 0;
+            will-change: transform;
+            /* 优化性能 */
+        }
+
+        /* 添加标签颜色类 */
+        .label-color-1 {
+            border-color: #FF0000;
+            background-color: rgba(255, 0, 0, 0.1);
+        }
+
+        .label-color-2 {
+            border-color: #00FF00;
+            background-color: rgba(0, 255, 0, 0.1);
+        }
+
+        .label-color-3 {
+            border-color: #0000FF;
+            background-color: rgba(0, 0, 255, 0.1);
+        }
+
+        .label-color-4 {
+            border-color: #FFFF00;
+            background-color: rgba(255, 255, 0, 0.1);
+        }
+
+        .label-color-5 {
+            border-color: #FF00FF;
+            background-color: rgba(255, 0, 255, 0.1);
+        }
+
+        .label-color-6 {
+            border-color: #00FFFF;
+            background-color: rgba(0, 255, 255, 0.1);
+        }
+
+        .label-color-7 {
+            border-color: #FFA500;
+            background-color: rgba(255, 165, 0, 0.1);
+        }
+
+        .label-color-8 {
+            border-color: #800080;
+            background-color: rgba(128, 0, 128, 0.1);
+        }
+
+        .label-color-9 {
+            border-color: #008000;
+            background-color: rgba(0, 128, 0, 0.1);
+        }
+
+        .label-color-10 {
+            border-color: #800000;
+            background-color: rgba(128, 0, 0, 0.1);
+        }
+
+        /* 标签列表中的颜色指示器 */
+        .color-indicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+            display: inline-block;
+            border: 2px solid;
+        }
+
+        /* 在label-panel div中添加翻页控件 */
+        .label-panel {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 200px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+            /* 添加合适的z-index */
+        }
+
+        .page-info {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .page-controls {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+        }
+
+        .page-btn {
+            padding: 4px 8px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .page-btn:hover {
+            background: #45a049;
+        }
+
+        .page-btn:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        #pageInfo {
+            font-size: 14px;
+            color: #666;
+            font-weight: bold;
+        }
+    </style>
+    <script src="./js/lib/jszip.min.js"></script>
+    <script src="./js/db.js"></script>
+</head>
+
+<body>
+    <div class="upload-section">
+        <h2>图片上传</h2>
+        <input type="file" id="fileInput" accept="image/*" multiple>
+        <input type="file" id="labelInput" accept=".txt" multiple style="display: none;">
+        <button onclick="document.getElementById('fileInput').click()" style="margin: 0 10px;">选择图片</button>
+        <button onclick="document.getElementById('labelInput').click()" style="margin: 0 10px;">选择标签</button>
+        <button onclick="showDownloadDialog()">下载YOLO数据</button>
+        <button onclick="clearDatabase()" style="background-color: #ff4444;">清空数据库</button>
+        <button onclick="deleteCurrentImage()" style="background-color: #ff6b6b;">删除当前图片</button>
+    </div>
+
+    <!-- 添加下载配置对话框 -->
+    <div id="downloadDialog" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+         background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 1001;">
+        <h3>下载设置</h3>
+        <div style="margin-bottom: 15px;">
+            <label>数据集类型：</label>
+            <select id="datasetType" style="width: 200px; padding: 5px;">
+                <option value="train">训练集 (train)</option>
+                <option value="valid">验证集 (valid)</option>
+                <option value="test">测试集 (test)</option>
+            </select>
+        </div>
+        <div style="margin-bottom: 15px;">
+            <label>项目名称：</label>
+            <input type="text" id="projectName" style="width: 200px; padding: 5px;" placeholder="例如：dataset">
+        </div>
+        <div style="margin-bottom: 15px;">
+            <label>类别文件名：</label>
+            <input type="text" id="classesFileName" style="width: 200px; padding: 5px;" value="classes.txt">
+        </div>
+        <div style="text-align: right;">
+            <button onclick="hideDownloadDialog()" style="margin-right: 10px;">取消</button>
+            <button onclick="downloadYOLOData()" style="background-color: #4CAF50; color: white;">下载</button>
+        </div>
+    </div>
+
+    <!-- 添加遮罩层 -->
+    <div id="overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+         background: rgba(0,0,0,0.5); z-index: 1000;"></div>
+
+    <div class="status" id="status"></div>
+
+    <div class="image-container">
+        <div class="canvas-container">
+            <canvas id="imageCanvas"></canvas>
+            <div id="tempBox"></div>
+            <div id="selectionBox"></div>
+        </div>
+    </div>
+
+    <div class="label-panel">
+
+        <!-- 添加翻页信息 -->
+        <div class="page-info">
+            <span id="pageInfo">图片 0/0</span>
+            <div class="page-controls">
+                <button onclick="switchImage('prev')" class="page-btn">&lt; 上一页</button>
+                <button onclick="switchImage('next')" class="page-btn">下一页 &gt;</button>
+            </div>
+        </div>
+        <h3>标签管理</h3>
+        <div class="label-list" id="labelList">
+            <!-- 标签列表将通过JavaScript动态生成 -->
+        </div>
+        <div class="add-label-form">
+            <input type="number" id="newLabelOrder" placeholder="标签编号" min="1"
+                style="width: 100%; padding: 5px; margin-bottom: 5px;">
+            <input type="text" id="newLabelName" placeholder="标签名称">
+            <button onclick="addNewLabel()">添加标签</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('imageCanvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        let scale = 1;
+        let isFirstClick = false;
+        let tempStartX, tempStartY;
+        const selectionBox = document.getElementById('selectionBox');
+        let boxes = [];
+        let imageDB;
+        let currentImageIndex = 0;
+        let totalImages = 0;
+        let isSelectMode = false;  // 是否处于选中模式
+        let selectedBoxes = new Set();  // 使用 Set 存储选中的框
+        let isSwitching = false;  // 添加切换锁
+        let isLoading = false;  // 添加加载状态变量
+
+        // 修改标签数据结构初始化
+        let labels = [
+            { id: 'person', order: 1 },
+            { id: 'car', order: 2 },
+            { id: 'bicycle', order: 3 }
+        ];
+        let currentLabel = labels[0];  // 当前选中的标签
+        let defaultLabel = labels[0];  // 默认标签
+
+        // 添加变量记录上一个框的大小
+        let lastBoxSizes = [];  // 存储最近的10个框的尺寸
+        const MAX_STORED_BOXES = 10;  // 最多存储10个框
+        let currentBoxIndex = 0;  // 当前使用的框的索引
+        let lastBoxSize = { width: 0, height: 0 };  // 当前使用的框的尺寸
+        let isMovingBox = false;  // 是否正在移动框
+        let movingBox = null;     // 正在移动的框
+
+        // 添加鼠标位置跟踪变量
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+
+        // 添加颜色管理
+        const labelColors = {
+            1: { border: '#FF0000', background: 'rgba(255, 0, 0, 0.1)' },    // 红色
+            2: { border: '#00FF00', background: 'rgba(0, 255, 0, 0.1)' },    // 绿色
+            3: { border: '#0000FF', background: 'rgba(0, 0, 255, 0.1)' },    // 蓝色
+            4: { border: '#FFFF00', background: 'rgba(255, 255, 0, 0.1)' },  // 黄色
+            5: { border: '#FF00FF', background: 'rgba(255, 0, 255, 0.1)' },  // 品红
+            6: { border: '#00FFFF', background: 'rgba(0, 255, 255, 0.1)' },  // 青色
+            7: { border: '#FFA500', background: 'rgba(255, 165, 0, 0.1)' },  // 橙色
+            8: { border: '#800080', background: 'rgba(128, 0, 128, 0.1)' },  // 紫色
+            9: { border: '#008000', background: 'rgba(0, 128, 0, 0.1)' },    // 深绿
+            10: { border: '#800000', background: 'rgba(128, 0, 0, 0.1)' }    // 褐色
+        };
+
+        // 获取标签颜色
+        function getLabelColor(order) {
+            return labelColors[order] || labelColors[1]; // 如果超出范围就返回第一个颜色
+        }
+
+        // 初始化数据库
+        async function initDB() {
+            console.log('初始化数据库...');
+            imageDB = new ImageDB();
+            await imageDB.connect();
+            await loadImagesFromDB();
+        }
+
+        // 从数据库加载图片
+        async function loadImagesFromDB() {
+            if (isLoading) {
+                console.log('正在加载中，请等待...');
+                return;
+            }
+
+            const status = document.getElementById('status');
+            const pageInfo = document.getElementById('pageInfo');
+            try {
+                isLoading = true;
+                status.textContent = '正在加载...';
+
+                const images = await imageDB.getAllImages();
+                totalImages = images.length;
+                if (totalImages > 0) {
+                    const imageData = images[currentImageIndex];
+
+                    // 等待图片加载完成
+                    await new Promise((resolve) => {
+                        img.onload = () => {
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            ctx.drawImage(img, 0, 0);
+                            resolve();
+                        };
+                        img.src = imageData.data;
+                    });
+
+                    // 更新页码显示
+                    pageInfo.textContent = `图片 ${currentImageIndex + 1}/${totalImages}`;
+                    status.textContent = `当前图片: ${currentImageIndex + 1}/${totalImages}`;
+
+                    // 加载标签数据
+                    const labels = await imageDB.getLabelData(imageData.id);
+                    loadLabelsToCanvas(labels);
+
+                    // 更新翻页按钮状态
+                    updatePageButtons();
+                } else {
+                    pageInfo.textContent = '图片 0/0';
+                    status.textContent = '没有图片';
+                }
+            } catch (error) {
+                console.error('加载失败:', error);
+                status.textContent = '加载失败: ' + error;
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        // 加载图片
+        function loadImage(file) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 图片加载完成后设置画布
+        img.onload = function () {
+            scale = 1;  // 重置缩放比例
+            canvas.width = img.width;
+            canvas.height = img.height;
+
+            // 添加图片平滑处理
+            ctx.imageSmoothingEnabled = false;
+            ctx.mozImageSmoothingEnabled = false;
+            ctx.webkitImageSmoothingEnabled = false;
+            ctx.msImageSmoothingEnabled = false;
+
+            ctx.drawImage(img, 0, 0);
+
+            const container = canvas.closest('.canvas-container');
+            container.style.transform = `scale(${scale})`;
+
+            // 清除所有框
+            boxes.forEach(box => box.remove());
+            boxes = [];
+            tempBox.style.display = 'none';
+
+            // 更新临时框的缩放
+            tempBox.style.transformOrigin = '0 0';
+            tempBox.style.transform = `scale(${1 / scale})`;
+        };
+
+        // 修改文件输入处理
+        document.getElementById('fileInput').addEventListener('change', async function (e) {
+            const files = Array.from(e.target.files);
+            const status = document.getElementById('status');
+
+            for (const file of files) {
+                try {
+                    const reader = new FileReader();
+                    await new Promise((resolve, reject) => {
+                        reader.onload = async (e) => {
+                            try {
+                                const imageData = {
+                                    name: file.name,
+                                    type: file.type,
+                                    data: e.target.result,
+                                    timestamp: new Date().getTime()
+                                };
+                                await imageDB.saveImage(imageData);
+                                resolve();
+                            } catch (error) {
+                                reject(error);
+                            }
+                        };
+                        reader.onerror = () => reject(new Error('读取文件失败'));
+                        reader.readAsDataURL(file);
+                    });
+                } catch (error) {
+                    console.error('上传失败:', error);
+                    status.textContent = '上传失败: ' + error;
+                    return;
+                }
+            }
+
+            status.textContent = '上传成功!';
+            await loadImagesFromDB();
+        });
+
+        // 绘制十字线
+        function drawCrosshair(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / scale;
+            const y = (e.clientY - rect.top) / scale;
+
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+
+            // 设置十字线样式
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)'; // 增加不透明度
+            ctx.lineWidth = 4; // 增加线条宽度
+
+            // 绘制主十字线
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+
+            // 添加辅助线（虚线）
+            ctx.setLineDash([5, 5]); // 设置虚线样式
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'; // 白色辅助线
+            ctx.lineWidth = 1;
+
+            // 绘制白色辅助线
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        // 修改标签加载函数
+        function loadLabelsToCanvas(labelData) {
+            console.log('开始加载标注数据到画布:', labelData);
+            // 清除现有的框
+            boxes.forEach(box => box.remove());
+            boxes = [];
+
+            // 创建新的框
+            labelData.forEach(label => {
+                const { x, y, width, height, order } = label;
+                console.log('处理标注数据:', label);
+
+                const canvasX = x * canvas.width - (width * canvas.width / 2);
+                const canvasY = y * canvas.height - (height * canvas.height / 2);
+                const canvasWidth = width * canvas.width;
+                const canvasHeight = height * canvas.height;
+
+                console.log('转换后的画布坐标:', {
+                    x: canvasX,
+                    y: canvasY,
+                    width: canvasWidth,
+                    height: canvasHeight,
+                    order: order
+                });
+
+                const box = createBox(canvasX, canvasY, canvasWidth, canvasHeight);
+                box.setAttribute('data-label-order', order);
+
+                // 从全局标签列表中查找对应的标签信息
+                const labelInfo = labels.find(l => l.order === order);
+                const labelName = labelInfo ? labelInfo.id : `class_${order}`;
+
+                // 更新标签显示和颜色
+                const color = getLabelColor(order);
+                box.style.borderColor = color.border;
+                box.style.backgroundColor = color.background;
+
+                const labelElement = box.querySelector('.box-label');
+                if (labelElement) {
+                    labelElement.textContent = labelName;
+                    labelElement.style.backgroundColor = color.border;
+                }
+
+                canvas.closest('.canvas-container').appendChild(box);
+                boxes.push(box);
+            });
+            console.log('标注框加载完成，当前框数量:', boxes.length);
+        }
+
+        // 修改保存标签函数
+        async function saveLabelsToDb() {
+            try {
+                const images = await imageDB.getAllImages();
+                console.log('获取到所有图片:', images);
+                if (images.length > 0) {
+                    const currentImage = images[currentImageIndex];
+                    console.log('当前图片:', currentImage);
+                    console.log('当前标注框数量:', boxes.length);
+
+                    const labelData = boxes.map(box => {
+                        const x = parseFloat(box.style.left);
+                        const y = parseFloat(box.style.top);
+                        const width = parseFloat(box.style.width);
+                        const height = parseFloat(box.style.height);
+                        // 获取框的标签序号
+                        const order = parseInt(box.getAttribute('data-label-order')) ||
+                            labels.find(l => l.id === box.getAttribute('data-label'))?.order ||
+                            currentLabel.order;
+
+                        console.log('处理标注框:', {
+                            left: box.style.left,
+                            top: box.style.top,
+                            width: box.style.width,
+                            height: box.style.height,
+                            order: order
+                        });
+
+                        const data = {
+                            order: order, // 保存实际的标签序号
+                            x: (x + width / 2) / canvas.width,
+                            y: (y + height / 2) / canvas.height,
+                            width: width / canvas.width,
+                            height: height / canvas.height
+                        };
+                        console.log('转换后的标注数据:', data);
+                        return data;
+                    });
+
+                    console.log('准备保存的标注数据:', labelData);
+                    await imageDB.saveLabelData(currentImage.id, labelData);
+                    console.log('标签保存成功');
+                }
+            } catch (error) {
+                console.error('标签保存失败:', error);
+            }
+        }
+
+        // 修改创建框函数
+        function createBox(left, top, width, height) {
+            // 记录新创建的框的尺寸
+            const newSize = { width, height };
+            if (lastBoxSizes.length >= MAX_STORED_BOXES) {
+                lastBoxSizes.shift();  // 移除最旧的
+            }
+            lastBoxSizes.push(newSize);
+            currentBoxIndex = lastBoxSizes.length - 1;
+            lastBoxSize = newSize;
+
+            console.log('保存新的框尺寸:', {
+                size: newSize,
+                totalStored: lastBoxSizes.length,
+                currentIndex: currentBoxIndex
+            });
+
+            const box = document.createElement('div');
+            box.className = 'selection-box';
+            if (isSelectMode) {
+                box.classList.add('selectable');
+            }
+
+            // 设置基本样式
+            box.style.left = left + 'px';
+            box.style.top = top + 'px';
+            box.style.width = width + 'px';
+            box.style.height = height + 'px';
+            box.style.display = 'block';
+            box.style.position = 'absolute';
+            box.style.transformOrigin = '0 0';
+
+            // 设置当前选中的标签信息
+            box.setAttribute('data-label', currentLabel.id);
+            box.setAttribute('data-label-order', currentLabel.order);
+
+            // 设置标签颜色
+            const color = getLabelColor(currentLabel.order);
+            box.style.borderColor = color.border;
+            box.style.backgroundColor = color.background;
+
+            // 添加调整手柄
+            const handles = ['nw', 'ne', 'sw', 'se'];
+            handles.forEach(pos => {
+                const handle = document.createElement('div');
+                handle.className = `resize-handle ${pos}`;
+                handle.style.borderColor = color.border;
+                box.appendChild(handle);
+            });
+
+            // 添加标签显示
+            const labelElement = document.createElement('div');
+            labelElement.className = 'box-label';
+            labelElement.textContent = currentLabel.id;
+            labelElement.style.backgroundColor = color.border;
+            box.appendChild(labelElement);
+
+            // 拖动相关变量
+            let isDragging = false;
+            let isResizing = false;
+            let currentHandle = null;
+            let startX, startY;
+            let originalLeft, originalTop, originalWidth, originalHeight;
+
+            // 添加拖动功能
+            box.addEventListener('mousedown', function (e) {
+                if (isSelectMode && e.target === box) {
+                    isDragging = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    originalLeft = parseFloat(box.style.left);
+                    originalTop = parseFloat(box.style.top);
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    // 选中当前框
+                    if (selectedBoxes.has(box)) {
+                        selectedBoxes.delete(box);
+                        box.style.border = '2px solid #007bff';
+                    } else {
+                        selectedBoxes.add(box);
+                        box.style.border = '2px solid #ff0000';
+                    }
+                    console.log('当前选中框数量:', selectedBoxes.size);
+                }
+            });
+
+            // 添加调整大小功能
+            box.querySelectorAll('.resize-handle').forEach(handle => {
+                handle.addEventListener('mousedown', function (e) {
+                    if (isSelectMode) {
+                        isResizing = true;
+                        currentHandle = handle;
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        originalLeft = parseFloat(box.style.left);
+                        originalTop = parseFloat(box.style.top);
+                        originalWidth = parseFloat(box.style.width);
+                        originalHeight = parseFloat(box.style.height);
+                        e.stopPropagation();
+                    }
+                });
+            });
+
+            // 全局鼠标移动事件
+            document.addEventListener('mousemove', function (e) {
+                if (!isSelectMode) return;
+
+                if (isDragging) {
+                    const dx = (e.clientX - startX) / scale;
+                    const dy = (e.clientY - startY) / scale;
+                    box.style.left = (originalLeft + dx) + 'px';
+                    box.style.top = (originalTop + dy) + 'px';
+                }
+                else if (isResizing && currentHandle) {
+                    const dx = (e.clientX - startX) / scale;
+                    const dy = (e.clientY - startY) / scale;
+
+                    if (currentHandle.classList.contains('nw')) {
+                        box.style.left = (originalLeft + dx) + 'px';
+                        box.style.top = (originalTop + dy) + 'px';
+                        box.style.width = (originalWidth - dx) + 'px';
+                        box.style.height = (originalHeight - dy) + 'px';
+                    }
+                    else if (currentHandle.classList.contains('ne')) {
+                        box.style.top = (originalTop + dy) + 'px';
+                        box.style.width = (originalWidth + dx) + 'px';
+                        box.style.height = (originalHeight - dy) + 'px';
+                    }
+                    else if (currentHandle.classList.contains('sw')) {
+                        box.style.left = (originalLeft + dx) + 'px';
+                        box.style.width = (originalWidth - dx) + 'px';
+                        box.style.height = (originalHeight + dy) + 'px';
+                    }
+                    else if (currentHandle.classList.contains('se')) {
+                        box.style.width = (originalWidth + dx) + 'px';
+                        box.style.height = (originalHeight + dy) + 'px';
+                    }
+                }
+            });
+
+            // 全局鼠标松开事件
+            document.addEventListener('mouseup', function () {
+                isDragging = false;
+                isResizing = false;
+                currentHandle = null;
+            });
+
+            // 更新lastBoxSize
+            lastBoxSize.width = width;
+            lastBoxSize.height = height;
+
+            return box;
+        }
+
+        // 转换为YOLO格式数据
+        function convertToYOLO(box) {
+            const x = parseFloat(box.style.left);
+            const y = parseFloat(box.style.top);
+            const width = parseFloat(box.style.width);
+            const height = parseFloat(box.style.height);
+
+            // 计算中心点坐标和相对尺寸
+            const centerX = (x + width / 2) / canvas.width;
+            const centerY = (y + height / 2) / canvas.height;
+            const relativeWidth = width / canvas.width;
+            const relativeHeight = height / canvas.height;
+
+            // 标签ID (这里简化处理，person=0)
+            const labelId = 0;
+
+            return `${labelId} ${centerX.toFixed(6)} ${centerY.toFixed(6)} ${relativeWidth.toFixed(6)} ${relativeHeight.toFixed(6)}`;
+        }
+
+        // 显示下载对话框
+        function showDownloadDialog() {
+            document.getElementById('downloadDialog').style.display = 'block';
+            document.getElementById('overlay').style.display = 'block';
+        }
+
+        // 隐藏下载对话框
+        function hideDownloadDialog() {
+            document.getElementById('downloadDialog').style.display = 'none';
+            document.getElementById('overlay').style.display = 'none';
+        }
+
+        // 修改下载YOLO数据函数
+        async function downloadYOLOData() {
+            try {
+                const status = document.getElementById('status');
+                status.textContent = '正在准备下载...';
+
+                // 获取用户设置
+                const datasetType = document.getElementById('datasetType').value;
+                const projectName = document.getElementById('projectName').value || 'dataset';
+                const classesFileName = document.getElementById('classesFileName').value || 'classes.txt';
+
+                // 创建ZIP文件
+                const zip = new JSZip();
+
+                // 创建目录结构
+                const baseDir = `${projectName}`;
+                const imagesDir = `${baseDir}/${datasetType}/images`;
+                const labelsDir = `${baseDir}/${datasetType}/labels`;
+
+                // 获取所有图片
+                const images = await imageDB.getAllImages();
+                console.log(`准备处理 ${images.length} 张图片`);
+
+                // 直接使用标签管理中的标签列表
+                const sortedLabels = [...labels].sort((a, b) => a.order - b.order);
+                const classes = sortedLabels.map(label => label.id);
+                console.log('标签列表:', classes);
+
+                // 保存类别文件
+                zip.file(`${labelsDir}/${classesFileName}`, classes.join('\n'));
+                console.log('已添加类别文件');
+
+                // 记录处理统计
+                let processedImages = 0;
+                let skippedLabels = 0;
+
+                // 处理每张图片及其标签
+                for (let i = 0; i < images.length; i++) {
+                    const image = images[i];
+                    const imageNumber = String(i).padStart(6, '0');
+                    const imageName = `image_${imageNumber}.jpg`;
+
+                    // 添加图片(所有图片都添加)
+                    const imageData = image.data.split(',')[1];
+                    zip.file(`${imagesDir}/${imageName}`, imageData, { base64: true });
+                    processedImages++;
+
+                    // 获取标签数据
+                    const labels = await imageDB.getLabelData(image.id);
+
+                    // 只有当有标签时才生成标签文件
+                    if (labels && labels.length > 0) {
+                        // 转换并添加标签文件
+                        const labelName = `image_${imageNumber}.txt`;
+                        const yoloLabels = labels.map(label => {
+                            const order = label.order - 1; // YOLO格式类别从0开始
+                            return `${order} ${label.x.toFixed(6)} ${label.y.toFixed(6)} ${label.width.toFixed(6)} ${label.height.toFixed(6)}`;
+                        }).join('\n');
+
+                        // 添加标签文件
+                        zip.file(`${labelsDir}/${labelName}`, yoloLabels);
+                    } else {
+                        skippedLabels++;
+                        console.log(`跳过无标签图片的标签文件: ${imageName}`);
+                    }
+
+                    status.textContent = `正在处理: ${i + 1}/${images.length} (已处理图片: ${processedImages}, 跳过标签: ${skippedLabels})`;
+                }
+
+                // 创建数据集配置文件
+                const datasetYaml = `
+path: ${projectName}
+train: train/images
+val: valid/images
+test: test/images
+
+nc: ${classes.length}  # 类别数量
+names: ${JSON.stringify(classes)}  # 类别名称
+                `.trim();
+                zip.file(`${baseDir}/dataset.yaml`, datasetYaml);
+
+                // 创建README文件
+                const readme = `
+# ${projectName}
+
+## 数据集信息
+- 总图片数量: ${images.length}
+- 已标注图片: ${processedImages - skippedLabels}
+- 未标注图片: ${skippedLabels}
+- 类别数量: ${classes.length}
+- 类别列表: ${classes.join(', ')}
+
+## 目录结构
+\`\`\`
+${projectName}/
+├── dataset.yaml    # 数据集配置文件
+├── ${datasetType}/
+│   ├── images/    # 图片目录 (${processedImages}张图片)
+│   └── labels/    # 标签目录 (${processedImages - skippedLabels}个标签文件)
+│       └── ${classesFileName}     # 类别文件
+\`\`\`
+
+## 标注格式
+使用YOLO格式：\`<class_id> <x_center> <y_center> <width> <height>\`
+
+## 统计信息
+- 处理时间: ${new Date().toLocaleString()}
+- 已标注率: ${(((processedImages - skippedLabels) / processedImages) * 100).toFixed(2)}%
+                `.trim();
+                zip.file(`${baseDir}/README.md`, readme);
+
+                // 生成并下载ZIP文件
+                status.textContent = '正在生成ZIP文件...';
+                const content = await zip.generateAsync({
+                    type: 'blob',
+                    compression: 'DEFLATE',
+                    compressionOptions: {
+                        level: 9
+                    }
+                });
+
+                // 下载文件
+                const url = URL.createObjectURL(content);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${projectName}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                status.textContent = `下载完成！已处理 ${processedImages} 张图片，其中 ${skippedLabels} 张未标注`;
+                hideDownloadDialog();
+                console.log('数据集打包完成');
+
+            } catch (error) {
+                console.error('下载失败:', error);
+                document.getElementById('status').textContent = '下载失败: ' + error;
+            }
+        }
+
+        // 修改缩放事件处理
+        document.addEventListener('wheel', function (e) {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();  // 阻止默认的缩放行为
+
+                // 获取画布容器和鼠标位置
+                const container = canvas.closest('.canvas-container');
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                // 计算新的缩放比例
+                const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                const newScale = Math.min(Math.max(scale * delta, 0.1), 10.0);
+
+                if (newScale !== scale) {
+                    // 更新缩放比例
+                    scale = newScale;
+
+                    // 更新画布容器的缩放
+                    container.style.transform = `scale(${scale})`;
+                    container.style.transformOrigin = 'center center';
+
+                    // 更新所有标注框的样式
+                    boxes.forEach(box => {
+                        // 移除之前的transform
+                        box.style.transform = '';
+                        box.style.transformOrigin = '';
+
+                        // 更新resize handles的样式
+                        const handles = box.querySelectorAll('.resize-handle');
+                        handles.forEach(handle => {
+                            handle.style.transform = '';
+                        });
+                    });
+
+                    // 更新临时框的样式
+                    if (tempBox) {
+                        tempBox.style.transform = '';
+                        tempBox.style.transformOrigin = '';
+                    }
+
+                    // 如果存在移动框，也更新它的样式
+                    if (movingBox) {
+                        movingBox.style.transform = '';
+                        movingBox.style.transformOrigin = '';
+                    }
+
+                    console.log(`缩放比例更新为: ${scale.toFixed(2)}`);
+                }
+            }
+        }, { passive: false });
+
+        // 移除canvas上的wheel事件监听器
+        canvas.removeEventListener('wheel', function (e) {
+            // 移除旧的事件监听器
+        });
+
+        // 修改鼠标事件中的坐标计算
+        function getScaledCoordinates(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / scale;
+            const y = (e.clientY - rect.top) / scale;
+            return { x, y };
+        }
+
+        // 修改鼠标事件处理中的坐标计算
+        canvas.addEventListener('mousedown', function (e) {
+            if (e.button === 0) { // 左键
+                const coords = getScaledCoordinates(e);
+                const x = coords.x;
+                const y = coords.y;
+
+                if (isMovingBox && movingBox) {
+                    // 确认移动框的位置，考虑缩放因素
+                    const scaledWidth = parseFloat(movingBox.style.width);
+                    const scaledHeight = parseFloat(movingBox.style.height);
+
+                    const left = x - scaledWidth / 2;
+                    const top = y - scaledHeight / 2;
+
+                    const newBox = createBox(left, top, scaledWidth, scaledHeight);
+                    canvas.closest('.canvas-container').appendChild(newBox);
+                    boxes.push(newBox);
+
+                    // 清理移动框
+                    movingBox.remove();
+                    movingBox = null;
+                    isMovingBox = false;
+
+                    console.log('确认移动框位置:', {
+                        scale,
+                        finalPosition: { left, top },
+                        size: { width: scaledWidth, height: scaledHeight }
+                    });
+                    return;
+                }
+
+                if (isSelectMode) {
+                    // 选中模式：查找和选中框
+                    const clickedBox = findBoxAtPosition(x, y);
+                    if (clickedBox) {
+                        if (selectedBoxes.has(clickedBox)) {
+                            // 如果框已经被选中，则取消选中
+                            selectedBoxes.delete(clickedBox);
+                            clickedBox.style.border = '2px solid #007bff';
+                        } else {
+                            // 选中新的框
+                            selectedBoxes.add(clickedBox);
+                            clickedBox.style.border = '2px solid #ff0000';
+                        }
+                        console.log('当前选中框数量:', selectedBoxes.size);
+                    } else {
+                        // 点击空白处，取消所有选中
+                        selectedBoxes.forEach(box => {
+                            box.style.border = '2px solid #007bff';
+                        });
+                        selectedBoxes.clear();
+                    }
+                } else {
+                    // 绘制模式：原有的绘制逻辑
+                    if (!isFirstClick) {
+                        isFirstClick = true;
+                        tempStartX = x;
+                        tempStartY = y;
+
+                        tempBox.style.display = 'block';
+                        tempBox.style.left = x + 'px';
+                        tempBox.style.top = y + 'px';
+                        tempBox.style.width = '0px';
+                        tempBox.style.height = '0px';
+                    } else {
+                        isFirstClick = false;
+                        const width = Math.abs(x - tempStartX);
+                        const height = Math.abs(y - tempStartY);
+
+                        if (width > 5 && height > 5) {
+                            const left = Math.min(tempStartX, x);
+                            const top = Math.min(tempStartY, y);
+
+                            const newBox = createBox(left, top, width, height);
+                            canvas.closest('.canvas-container').appendChild(newBox);
+                            boxes.push(newBox);
+                        }
+
+                        tempBox.style.display = 'none';
+                    }
+                }
+            }
+        });
+
+        // 在canvas的mousemove事件中更新鼠标位置
+        canvas.addEventListener('mousemove', function (e) {
+            const coords = getScaledCoordinates(e);
+            lastMouseX = coords.x;
+            lastMouseY = coords.y;
+
+            drawCrosshair(e);
+
+            if (isMovingBox && movingBox) {
+                // 更新移动框的位置，考虑缩放因素
+                const scaledWidth = parseFloat(movingBox.style.width);
+                const scaledHeight = parseFloat(movingBox.style.height);
+
+                const left = lastMouseX - scaledWidth / 2;
+                const top = lastMouseY - scaledHeight / 2;
+
+                movingBox.style.left = left + 'px';
+                movingBox.style.top = top + 'px';
+
+                console.log('更新移动框位置:', {
+                    scale,
+                    mousePos: { x: lastMouseX, y: lastMouseY },
+                    boxPos: { left, top }
+                });
+            } else if (isFirstClick) {
+                const width = lastMouseX - tempStartX;
+                const height = lastMouseY - tempStartY;
+
+                // 更新临时框位置和大小
+                tempBox.style.left = (width < 0 ? lastMouseX : tempStartX) + 'px';
+                tempBox.style.top = (height < 0 ? lastMouseY : tempStartY) + 'px';
+                tempBox.style.width = Math.abs(width) + 'px';
+                tempBox.style.height = Math.abs(height) + 'px';
+            }
+        });
+
+        // 键盘事件处理
+        document.addEventListener('keydown', async function (event) {
+            if (isLoading) {
+                event.preventDefault();
+                console.log('正在加载中，请等待...');
+                return;
+            }
+
+            // 修改E键和添加Q键处理逻辑
+            if (event.key === 'e' || event.key === 'E') {
+                if (lastBoxSizes.length > 0) {
+                    // 切换到下一个框
+                    currentBoxIndex = (currentBoxIndex + 1) % lastBoxSizes.length;
+                    lastBoxSize = lastBoxSizes[currentBoxIndex];
+                    console.log('切换到下一个框:', {
+                        index: currentBoxIndex,
+                        size: lastBoxSize
+                    });
+
+                    isMovingBox = true;
+                    updateMovingBox();
+                }
+                return;
+            } else if (event.key === 'q' || event.key === 'Q') {
+                if (lastBoxSizes.length > 0) {
+                    // 切换到上一个框
+                    currentBoxIndex = (currentBoxIndex - 1 + lastBoxSizes.length) % lastBoxSizes.length;
+                    lastBoxSize = lastBoxSizes[currentBoxIndex];
+                    console.log('切换到上一个框:', {
+                        index: currentBoxIndex,
+                        size: lastBoxSize
+                    });
+
+                    isMovingBox = true;
+                    updateMovingBox();
+                }
+                return;
+            }
+
+            // 检查是否按下数字键（1-9）
+            if (event.key >= '1' && event.key <= '9') {
+                const index = parseInt(event.key) - 1;
+                if (index < labels.length) {
+                    console.log(`使用数字键 ${event.key} 切换到标签:`, labels[index].id);
+                    selectLabel(labels[index].id);
+                    // 如果有选中的框，更新它们的标签
+                    if (selectedBoxes.size > 0) {
+                        selectedBoxes.forEach(box => {
+                            box.setAttribute('data-label', labels[index].id);
+                            box.setAttribute('data-label-order', labels[index].order);
+                            const labelElement = box.querySelector('.box-label');
+                            if (labelElement) {
+                                labelElement.textContent = labels[index].id;
+                            }
+                        });
+                    }
+                }
+                return;
+            }
+
+            if (event.key === 'Control') {
+                isSelectMode = true;
+                canvas.style.cursor = 'pointer';
+                boxes.forEach(box => box.classList.add('selectable'));
+                console.log('进入选中模式');
+            } else if (event.key === 'Delete' || event.key === 'Backspace') {
+                // 删除所有选中的框
+                if (selectedBoxes.size > 0) {
+                    selectedBoxes.forEach(box => {
+                        boxes = boxes.filter(b => b !== box);
+                        box.remove();
+                    });
+                    selectedBoxes.clear();
+                    console.log('删除选中的框');
+                }
+            } else if (event.key === 'Escape') {
+                isFirstClick = false;
+                tempBox.style.display = 'none';
+                // 取消所有选中
+                selectedBoxes.forEach(box => {
+                    box.style.border = '2px solid #007bff';
+                });
+                selectedBoxes.clear();
+            }
+            if (event.key === 'a' || event.key === 'A') {
+                await switchImage('prev');
+            } else if (event.key === 'd' || event.key === 'D') {
+                await switchImage('next');
+            } else if (event.key === 's' || event.key === 'S') {
+                await saveLabelsToDb();
+            }
+        });
+
+        // 修改 Control 键松开的处理
+        document.addEventListener('keyup', function (e) {
+            if (e.key === 'Control') {
+                isSelectMode = false;
+                canvas.style.cursor = 'none';
+                boxes.forEach(box => box.classList.remove('selectable'));
+                console.log('退出选中模式');
+            }
+            if (e.key === 'Escape' && isMovingBox) {
+                // 取消移动框
+                if (movingBox) {
+                    movingBox.remove();
+                    movingBox = null;
+                }
+                isMovingBox = false;
+                console.log('取消移动框');
+            }
+        });
+
+        // 修改切换图片函数，添加锁定机制
+        async function switchImage(direction) {
+            if (isSwitching) {
+                console.log('正在切换图片，请等待...');
+                return;
+            }
+
+            try {
+                isSwitching = true;
+                console.log('开始切换图片...');
+
+                // 保存当前图片的标签
+                await saveLabelsToDb();
+                console.log('当前标签保存完成');
+
+                // 计算新的索引
+                if (direction === 'prev') {
+                    if (currentImageIndex > 0) {
+                        currentImageIndex--;
+                    }
+                } else {
+                    if (currentImageIndex < totalImages - 1) {
+                        currentImageIndex++;
+                    }
+                }
+                console.log(`切换到图片索引: ${currentImageIndex}`);
+
+                // 加载新图片和标签
+                await loadImagesFromDB();
+                console.log('新图片和标签加载完成');
+
+            } catch (error) {
+                console.error('切换图片失败:', error);
+            } finally {
+                isSwitching = false;
+                console.log('切换操作完成');
+            }
+        }
+
+        // 添加清空数据库功能
+        async function clearDatabase() {
+            if (confirm('确定要清空所有数据吗？此操作不可恢复！')) {
+                try {
+                    const status = document.getElementById('status');
+                    status.textContent = '正在清空数据库...';
+
+                    await imageDB.clearDatabase();
+
+                    // 清除画布上的内容
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    // 清除所有标注框
+                    boxes.forEach(box => box.remove());
+                    boxes = [];
+
+                    // 重置计数器
+                    currentImageIndex = 0;
+                    totalImages = 0;
+
+                    status.textContent = '数据库已清空';
+
+                    // 刷新页面以重置所有状态
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } catch (error) {
+                    console.error('清空数据库失败:', error);
+                    document.getElementById('status').textContent = '清空数据库失败: ' + error;
+                }
+            }
+        }
+
+        // 添加查找框的函数
+        function findBoxAtPosition(x, y) {
+            for (let box of boxes) {
+                const boxLeft = parseFloat(box.style.left);
+                const boxTop = parseFloat(box.style.top);
+                const boxWidth = parseFloat(box.style.width);
+                const boxHeight = parseFloat(box.style.height);
+
+                if (x >= boxLeft && x <= boxLeft + boxWidth &&
+                    y >= boxTop && y <= boxTop + boxHeight) {
+                    return box;
+                }
+            }
+            return null;
+        }
+
+        // 修改渲染标签列表函数
+        function renderLabelList() {
+            const labelList = document.getElementById('labelList');
+            labelList.innerHTML = labels.map(label => {
+                const color = getLabelColor(label.order);
+                return `
+                    <div class="label-item ${label === currentLabel ? 'active' : ''}" data-label-id="${label.id}">
+                        <div class="label-content" onclick="selectLabel('${label.id}')">
+                            <div class="color-indicator" style="border-color: ${color.border}; background-color: ${color.background};"></div>
+                            <span style="color: #666; margin-right: 5px;">[${label.order}]</span>
+                            ${label.id}
+                        </div>
+                        <button class="delete-label" onclick="deleteLabel('${label.id}')">删除</button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 修改选择标签函数
+        function selectLabel(labelId) {
+            const label = labels.find(l => l.id === labelId);
+            if (label) {
+                currentLabel = label;
+                defaultLabel = label;
+                console.log(`选择标签: ${label.id}, 序号: ${label.order}`);
+
+                // 如果有选中的框，更新它们的标签和样式
+                selectedBoxes.forEach(box => {
+                    // 更新标签信息
+                    box.setAttribute('data-label', label.id);
+                    box.setAttribute('data-label-order', label.order);
+
+                    // 更新标签文本
+                    const labelElement = box.querySelector('.box-label');
+                    if (labelElement) {
+                        labelElement.textContent = label.id;
+                    }
+
+                    // 更新颜色
+                    const color = getLabelColor(label.order);
+                    box.style.borderColor = color.border;
+                    box.style.backgroundColor = color.background;
+
+                    // 更新标签背景色
+                    if (labelElement) {
+                        labelElement.style.backgroundColor = color.border;
+                    }
+
+                    // 更新调整手柄颜色
+                    const handles = box.querySelectorAll('.resize-handle');
+                    handles.forEach(handle => {
+                        handle.style.borderColor = color.border;
+                    });
+
+                    console.log('更新框标签和样式:', {
+                        id: label.id,
+                        order: label.order,
+                        color: color,
+                        element: box
+                    });
+                });
+                renderLabelList();
+            }
+        }
+
+        // 添加删除标签函数
+        function deleteLabel(labelId) {
+            // 检查是否是最后一个标签
+            if (labels.length <= 1) {
+                alert('至少需要保留一个标签！');
+                return;
+            }
+
+            // 确认删除
+            if (!confirm(`确定要删除标签 "${labelId}" 吗？`)) {
+                return;
+            }
+
+            console.log('删除标签:', labelId);
+
+            // 如果删除的是当前选中的标签，切换到第一个标签
+            if (currentLabel.id === labelId) {
+                const newCurrentLabel = labels.find(l => l.id !== labelId);
+                currentLabel = newCurrentLabel;
+                defaultLabel = newCurrentLabel;
+            }
+
+            // 更新使用该标签的框
+            boxes.forEach(box => {
+                if (box.getAttribute('data-label') === labelId) {
+                    box.setAttribute('data-label', currentLabel.id);
+                    box.setAttribute('data-label-order', currentLabel.order);
+                    const labelElement = box.querySelector('.box-label');
+                    if (labelElement) {
+                        labelElement.textContent = currentLabel.id;
+                    }
+                }
+            });
+
+            // 从数组中移除标签
+            labels = labels.filter(l => l.id !== labelId);
+
+            // 重新渲染标签列表
+            renderLabelList();
+            console.log('标签删除完成，剩余标签数量:', labels.length);
+        }
+
+        // 修改添加新标签函数
+        function addNewLabel() {
+            const orderInput = document.getElementById('newLabelOrder');
+            const nameInput = document.getElementById('newLabelName');
+            const order = parseInt(orderInput.value.trim());
+            const name = nameInput.value.trim().toLowerCase(); // 确保类名小写
+
+            if (!order || !name) {
+                alert('请输入标签编号和名称！');
+                return;
+            }
+
+            // 检查是否存在相同编号的标签
+            const existingLabelIndex = labels.findIndex(l => l.order === order);
+            if (existingLabelIndex !== -1) {
+                // 如果存在相同编号，则更新名称
+                if (confirm(`编号 ${order} 已存在，是否更新名称？`)) {
+                    const oldLabel = labels[existingLabelIndex];
+                    const oldId = oldLabel.id;
+                    console.log('更新前的标签:', oldLabel);
+
+                    // 更新标签名称
+                    oldLabel.id = name;
+
+                    // 更新使用该标签的框的显示名称
+                    boxes.forEach(box => {
+                        const boxLabelId = box.getAttribute('data-label');
+                        const boxLabelOrder = parseInt(box.getAttribute('data-label-order'));
+
+                        // 通过ID或序号匹配需要更新的框
+                        if (boxLabelId === oldId || boxLabelOrder === order) {
+                            box.setAttribute('data-label', name);
+                            box.setAttribute('data-label-order', order);
+                            const labelElement = box.querySelector('.box-label');
+                            if (labelElement) {
+                                labelElement.textContent = name;
+                            }
+                            console.log('更新框标签:', {
+                                oldId: oldId,
+                                newId: name,
+                                order: order,
+                                element: box
+                            });
+                        }
+                    });
+
+                    // 如果是当前选中的标签，更新当前标签
+                    if (currentLabel.id === oldId) {
+                        currentLabel = oldLabel;
+                    }
+                    // 如果是默认标签，更新默认标签
+                    if (defaultLabel.id === oldId) {
+                        defaultLabel = oldLabel;
+                    }
+
+                    console.log(`更新编号 ${order} 的标签名称为: ${name}`);
+                }
+            } else {
+                // 检查是否存在相同名称的标签
+                if (labels.some(l => l.id === name)) {
+                    alert(`标签名称 "${name}" 已存在！`);
+                    return;
+                }
+
+                // 添加新标签
+                labels.push({
+                    id: name,
+                    order: order
+                });
+                console.log(`添加新标签，编号: ${order}, 名称: ${name}`);
+            }
+
+            // 根据order排序
+            labels.sort((a, b) => a.order - b.order);
+
+            // 清空输入框
+            orderInput.value = '';
+            nameInput.value = '';
+
+            // 重新渲染标签列表
+            renderLabelList();
+            console.log('标签列表已更新，当前标签数量:', labels.length);
+        }
+
+        // 添加删除当前图片功能
+        async function deleteCurrentImage() {
+            if (totalImages === 0) {
+                alert('没有可删除的图片！');
+                return;
+            }
+
+            if (confirm('确定要删除当前图片吗？此操作不可恢复！')) {
+                try {
+                    const status = document.getElementById('status');
+                    status.textContent = '正在删除图片...';
+                    console.log('开始删除当前图片...');
+
+                    // 获取当前图片信息
+                    const images = await imageDB.getAllImages();
+                    const currentImage = images[currentImageIndex];
+
+                    if (!currentImage) {
+                        throw new Error('获取当前图片信息失败');
+                    }
+
+                    // 删除图片及其标签数据
+                    await imageDB.deleteImage(currentImage.id);
+                    console.log('图片及标签数据已删除');
+
+                    // 更新总图片数
+                    totalImages--;
+
+                    // 如果删除的是最后一张图片，将索引减1
+                    if (currentImageIndex === totalImages && totalImages > 0) {
+                        currentImageIndex--;
+                    }
+
+                    // 清除画布和标注框
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    boxes.forEach(box => box.remove());
+                    boxes = [];
+
+                    status.textContent = '图片已删除';
+                    console.log('删除操作完成');
+
+                    // 如果还有其他图片，加载下一张
+                    if (totalImages > 0) {
+                        await loadImagesFromDB();
+                        console.log('加载下一张图片');
+                    } else {
+                        status.textContent = '没有更多图片';
+                        console.log('没有更多图片可显示');
+                    }
+
+                } catch (error) {
+                    console.error('删除图片失败:', error);
+                    document.getElementById('status').textContent = '删除图片失败: ' + error;
+                }
+            }
+        }
+
+        // 添加标签文件处理函数
+        document.getElementById('labelInput').addEventListener('change', async function (e) {
+            const status = document.getElementById('status');
+            const labelFiles = Array.from(e.target.files);
+
+            if (labelFiles.length === 0) {
+                status.textContent = '没有选择标签文件';
+                return;
+            }
+
+            try {
+                status.textContent = '正在处理标签文件...';
+                console.log(`开始处理 ${labelFiles.length} 个标签文件`);
+
+                // 获取所有图片数据用于匹配
+                const images = await imageDB.getAllImages();
+                console.log(`数据库中共有 ${images.length} 张图片`);
+                let importedCount = 0;
+                let errorCount = 0;
+
+                for (const labelFile of labelFiles) {
+                    try {
+                        console.log(`处理标签文件: ${labelFile.name}`);
+                        // 获取不带扩展名的文件名
+                        const baseName = labelFile.name.replace('.txt', '');
+                        console.log(`查找匹配图片: ${baseName}`);
+
+                        // 查找匹配的图片
+                        const matchingImage = images.find(img => {
+                            const imgName = img.name.substring(0, img.name.lastIndexOf('.'));
+                            const match = imgName === baseName;
+                            if (match) {
+                                console.log(`找到匹配图片: ${img.name}, ID: ${img.id}`);
+                            }
+                            return match;
+                        });
+
+                        if (matchingImage) {
+                            // 读取标签文件内容
+                            const labelContent = await new Promise((resolve, reject) => {
+                                const reader = new FileReader();
+                                reader.onload = (e) => resolve(e.target.result);
+                                reader.onerror = (e) => reject(new Error('读取文件失败'));
+                                reader.readAsText(labelFile);
+                            });
+
+                            console.log(`标签文件内容: ${labelContent}`);
+
+                            // 解析YOLO格式的标签数据
+                            const labelData = labelContent.trim().split('\n').filter(line => line.trim()).map(line => {
+                                const parts = line.trim().split(/\s+/);
+                                console.log(`解析标签行: ${line}, 分割后:`, parts);
+
+                                if (parts.length !== 5) {
+                                    throw new Error(`标签格式错误: ${line}`);
+                                }
+
+                                const [order, x, y, width, height] = parts.map(Number);
+                                if (isNaN(order) || isNaN(x) || isNaN(y) || isNaN(width) || isNaN(height)) {
+                                    throw new Error(`标签数值无效: ${line}`);
+                                }
+
+                                return {
+                                    order: order + 1, // YOLO格式从0开始，转换为从1开始
+                                    x: parseFloat(x),
+                                    y: parseFloat(y),
+                                    width: parseFloat(width),
+                                    height: parseFloat(height)
+                                };
+                            });
+
+                            console.log(`解析后的标签数据:`, labelData);
+
+                            // 保存标签数据到数据库
+                            await imageDB.saveLabelData(matchingImage.id, labelData);
+                            importedCount++;
+                            console.log(`成功导入标签: ${labelFile.name}`);
+
+                            // 如果是当前显示的图片，立即更新显示
+                            const currentImages = await imageDB.getAllImages();
+                            const currentImageIndex = currentImages.findIndex(img => img.id === matchingImage.id);
+                            if (currentImageIndex === window.currentImageIndex) {
+                                console.log('更新当前显示的标签');
+                                loadLabelsToCanvas(labelData);
+                            }
+                        } else {
+                            console.log(`未找到匹配的图片: ${baseName}`);
+                            errorCount++;
+                        }
+                    } catch (error) {
+                        console.error(`处理标签文件 ${labelFile.name} 失败:`, error);
+                        errorCount++;
+                    }
+                }
+
+                const resultMessage = `标签导入完成: 成功${importedCount}个, 失败${errorCount}个`;
+                status.textContent = resultMessage;
+                console.log(resultMessage);
+
+                // 重新加载当前图片的标签
+                await loadImagesFromDB();
+
+            } catch (error) {
+                const errorMessage = `处理标签文件失败: ${error.message}`;
+                console.error(errorMessage);
+                status.textContent = errorMessage;
+            }
+        });
+
+        // 添加更新移动框的函数
+        function updateMovingBox() {
+            if (!movingBox) {
+                movingBox = document.createElement('div');
+                movingBox.className = 'moving-box';
+            }
+
+            // 应用当前选中的框的尺寸
+            const scaledWidth = lastBoxSize.width;
+            const scaledHeight = lastBoxSize.height;
+
+            movingBox.style.width = scaledWidth + 'px';
+            movingBox.style.height = scaledHeight + 'px';
+            movingBox.style.transformOrigin = 'center center'; // 确保缩放中心为canvas的中心
+
+            // 使用记录的鼠标位置设置初始位置
+            const left = lastMouseX - scaledWidth / 2;
+            const top = lastMouseY - scaledHeight / 2;
+
+            movingBox.style.left = left + 'px';
+            movingBox.style.top = top + 'px';
+
+            const container = canvas.closest('.canvas-container');
+            if (!movingBox.parentElement) {
+                container.appendChild(movingBox);
+            }
+
+            console.log('更新移动框:', {
+                scale,
+                size: { width: scaledWidth, height: scaledHeight },
+                position: { left, top },
+                boxIndex: currentBoxIndex
+            });
+        }
+
+        // 添加更新翻页按钮状态的函数
+        function updatePageButtons() {
+            const prevBtn = document.querySelector('.page-controls button:first-child');
+            const nextBtn = document.querySelector('.page-controls button:last-child');
+
+            if (prevBtn && nextBtn) {
+                prevBtn.disabled = currentImageIndex === 0;
+                nextBtn.disabled = currentImageIndex === totalImages - 1;
+            }
+        }
+
+        // 页面加载时初始化数据库
+        window.onload = async function () {
+            await initDB();
+            renderLabelList();
+        };
+
+        function zoomCanvas(scale) {
+            const canvas = document.getElementById('imageCanvas');
+            canvas.style.transform = `scale(${scale})`;
+            canvas.style.transformOrigin = 'center center'; // 确保每次缩放时都重设transform-origin
+        }
+    </script>
+</body>
+
+</html>
